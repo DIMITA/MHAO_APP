@@ -32,7 +32,7 @@ export class FilesController {
   @UseInterceptors(FileInterceptor('file'))
   @HttpCode(HttpStatus.CREATED)
   async upload(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: Multer.File,
     @CurrentUser() user: JwtPayload,
   ) {
     if (!file) {

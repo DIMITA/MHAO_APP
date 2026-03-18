@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mhao_secret}
       POSTGRES_DB: ${POSTGRES_DB:-mhao_db}
     ports:
-      - '5432:5432'
+      - '5439:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_secret}
     ports:
-      - '6379:6379'
+      - '6380:6379'
     volumes:
       - redis_data:/data
     healthcheck:
@@ -46,8 +46,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mhao_minio}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio_secret}
     ports:
-      - '9000:9000'
-      - '9001:9001'
+      - '9009:9000'
+      - '9010:9001'
     volumes:
       - minio_data:/data
 
@@ -68,7 +68,10 @@ services:
     env_file: .env
     environment:
       PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mhao}:${POSTGRES_PASSWORD:-mhao_secret}@postgres:5432/${POSTGRES_DB:-mhao_db}
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
     ports:
       - '3000:3000'
     volumes:
@@ -238,10 +241,10 @@ services:
     depends_on:
       - gateway
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:3000/api
+      NEXT_PUBLIC_API_URL: http://localhost:3000
       NODE_ENV: development
     ports:
-      - '3001:3000'
+      - '3003:3000'
     volumes:
       - ./frontend:/app
       - /app/node_modules

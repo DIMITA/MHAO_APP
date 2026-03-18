@@ -13,7 +13,7 @@ export class MinioService implements OnModuleInit {
 
   constructor(private readonly configService: ConfigService) {
     this.endpoint = this.configService.get<string>('MINIO_ENDPOINT', 'localhost');
-    this.port = parseInt(this.configService.get<string>('MINIO_PORT', '9000'), 10);
+    this.port = parseInt(this.configService.get<string>('MINIO_PORT', '9009'), 10);
     this.useSSL = this.configService.get<string>('MINIO_USE_SSL', 'false') === 'true';
     this.bucket = this.configService.get<string>('MINIO_BUCKET', 'mhao-files');
 
