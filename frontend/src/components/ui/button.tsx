@@ -1,14 +1,21 @@
 import * as React from 'react';
+import { Slot } from '@radix-ui/react-slot';
 import { cn } from '@/lib/utils';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'default' | 'outline' | 'ghost' | 'destructive' | 'secondary' | 'link';
   size?: 'sm' | 'md' | 'lg' | 'icon';
   isLoading?: boolean;
+  asChild?: boolean;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'default', size = 'md', isLoading, children, disabled, ...props }, ref) => {
+  (
+    { className, variant = 'default', size = 'md', isLoading, children, disabled, asChild = false, ...props },
+    ref,
+  ) => {
+    const Comp = asChild ? Slot : 'button';
+
     const base =
       'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50';
 
@@ -30,13 +37,13 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     return (
-      <button
+      <Comp
         ref={ref}
         className={cn(base, variants[variant], sizes[size], className)}
-        disabled={disabled || isLoading}
+        disabled={!asChild ? (disabled || isLoading) : undefined}
         {...props}
       >
-        {isLoading && (
+        {isLoading && !asChild && (
           <svg
             className="h-4 w-4 animate-spin"
             xmlns="http://www.w3.org/2000/svg"
@@ -59,7 +66,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           </svg>
         )}
         {children}
-      </button>
+      </Comp>
     );
   },
 );
