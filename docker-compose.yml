@@ -1,0 +1,253 @@
+version: '3.9'
+
+services:
+  # ─────────────────────────────
+  #  Infrastructure
+  # ─────────────────────────────
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: mhao_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mhao}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mhao_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-mhao_db}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-mhao}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: mhao_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_secret}
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-redis_secret}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: mhao_minio
+    restart: unless-stopped
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mhao_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio_secret}
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio_data:/data
+
+  # ─────────────────────────────
+  #  API Gateway (point d'entrée unique)
+  # ─────────────────────────────
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile.dev
+    container_name: mhao_gateway
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      PORT: 3000
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./gateway:/app
+      - /app/node_modules
+
+  # ─────────────────────────────
+  #  Microservices
+  # ─────────────────────────────
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile.dev
+    container_name: mhao_auth
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mhao}:${POSTGRES_PASSWORD:-mhao_secret}@postgres:5432/${POSTGRES_DB:-mhao_db}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379
+      MICROSERVICE_PORT: 4001
+    volumes:
+      - ./services/auth-service:/app
+      - /app/node_modules
+
+  projects-service:
+    build:
+      context: ./services/projects-service
+      dockerfile: Dockerfile.dev
+    container_name: mhao_projects
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mhao}:${POSTGRES_PASSWORD:-mhao_secret}@postgres:5432/${POSTGRES_DB:-mhao_db}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379
+      MICROSERVICE_PORT: 4002
+    volumes:
+      - ./services/projects-service:/app
+      - /app/node_modules
+
+  quotes-service:
+    build:
+      context: ./services/quotes-service
+      dockerfile: Dockerfile.dev
+    container_name: mhao_quotes
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mhao}:${POSTGRES_PASSWORD:-mhao_secret}@postgres:5432/${POSTGRES_DB:-mhao_db}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379
+      MICROSERVICE_PORT: 4003
+    volumes:
+      - ./services/quotes-service:/app
+      - /app/node_modules
+
+  payments-service:
+    build:
+      context: ./services/payments-service
+      dockerfile: Dockerfile.dev
+    container_name: mhao_payments
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mhao}:${POSTGRES_PASSWORD:-mhao_secret}@postgres:5432/${POSTGRES_DB:-mhao_db}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379
+      MICROSERVICE_PORT: 4004
+    volumes:
+      - ./services/payments-service:/app
+      - /app/node_modules
+
+  reviews-service:
+    build:
+      context: ./services/reviews-service
+      dockerfile: Dockerfile.dev
+    container_name: mhao_reviews
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mhao}:${POSTGRES_PASSWORD:-mhao_secret}@postgres:5432/${POSTGRES_DB:-mhao_db}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379
+      MICROSERVICE_PORT: 4005
+    volumes:
+      - ./services/reviews-service:/app
+      - /app/node_modules
+
+  notifications-service:
+    build:
+      context: ./services/notifications-service
+      dockerfile: Dockerfile.dev
+    container_name: mhao_notifications
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mhao}:${POSTGRES_PASSWORD:-mhao_secret}@postgres:5432/${POSTGRES_DB:-mhao_db}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379
+      MICROSERVICE_PORT: 4006
+    volumes:
+      - ./services/notifications-service:/app
+      - /app/node_modules
+
+  admin-service:
+    build:
+      context: ./services/admin-service
+      dockerfile: Dockerfile.dev
+    container_name: mhao_admin
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mhao}:${POSTGRES_PASSWORD:-mhao_secret}@postgres:5432/${POSTGRES_DB:-mhao_db}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379
+      MICROSERVICE_PORT: 4007
+    volumes:
+      - ./services/admin-service:/app
+      - /app/node_modules
+
+  files-service:
+    build:
+      context: ./services/files-service
+      dockerfile: Dockerfile.dev
+    container_name: mhao_files
+    restart: unless-stopped
+    depends_on:
+      - minio
+    env_file: .env
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-mhao_minio}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio_secret}
+      MICROSERVICE_PORT: 4008
+    volumes:
+      - ./services/files-service:/app
+      - /app/node_modules
+
+  # ─────────────────────────────
+  #  Frontend Web
+  # ─────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: mhao_frontend
+    restart: unless-stopped
+    depends_on:
+      - gateway
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000/api
+      NODE_ENV: development
+    ports:
+      - '3001:3000'
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

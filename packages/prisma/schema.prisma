@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  CLIENT
+  PROVIDER
+  ADMIN
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum ProjectStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum QuoteStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum PaymentStatus {
+  PENDING
+  IN_ESCROW
+  PARTIALLY_RELEASED
+  RELEASED
+  REFUNDED
+  FAILED
+}
+
+enum MilestoneStatus {
+  PENDING
+  APPROVED
+  PAID
+}
+
+enum MobileMoneyProvider {
+  MTN
+  ORANGE
+  MOOV
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  phone        String    @unique
+  passwordHash String    @map("password_hash")
+  firstName    String    @map("first_name")
+  lastName     String    @map("last_name")
+  role         Role      @default(CLIENT)
+  kycStatus    KycStatus @default(PENDING) @map("kyc_status")
+  isActive     Boolean   @default(true) @map("is_active")
+  fcmToken     String?   @map("fcm_token")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  profile          ProviderProfile?
+  projects         Project[]
+  quotesAsProvider Quote[]        @relation("ProviderQuotes")
+  reviewsGiven     Review[]       @relation("ReviewsGiven")
+  reviewsReceived  Review[]       @relation("ReviewsReceived")
+  notifications    Notification[]
+  otpCodes         OtpCode[]
+
+  @@map("users")
+}
+
+model ProviderProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique @map("user_id")
+  companyName String?  @map("company_name")
+  description String?
+  skills      String[]
+  zonesServed String[] @map("zones_served")
+  isVerified  Boolean  @default(false) @map("is_verified")
+  ratingAvg   Float    @default(0) @map("rating_avg")
+  ratingCount Int      @default(0) @map("rating_count")
+  kycDocType  String?  @map("kyc_doc_type")
+  kycDocRef   String?  @map("kyc_doc_ref") // encrypted
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quotes Quote[]
+
+  @@map("provider_profiles")
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  clientId    String        @map("client_id")
+  title       String
+  description String
+  category    String        @default("general")
+  budgetMin   Float         @map("budget_min")
+  budgetMax   Float         @map("budget_max")
+  lat         Float
+  lng         Float
+  address     String
+  city        String        @default("Cotonou")
+  country     String        @default("Benin")
+  status      ProjectStatus @default(OPEN)
+  photos      String[]
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  client  User      @relation(fields: [clientId], references: [id])
+  quotes  Quote[]
+  payment Payment?
+  reviews Review[]
+
+  @@map("projects")
+}
+
+model Quote {
+  id           String      @id @default(uuid())
+  projectId    String      @map("project_id")
+  providerId   String      @map("provider_id")
+  profileId    String      @map("profile_id")
+  amount       Float
+  description  String
+  timelineDays Int         @map("timeline_days")
+  status       QuoteStatus @default(PENDING)
+  files        String[]
+  notes        String?
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  project  Project         @relation(fields: [projectId], references: [id])
+  provider User            @relation("ProviderQuotes", fields: [providerId], references: [id])
+  profile  ProviderProfile @relation(fields: [profileId], references: [id])
+
+  @@map("quotes")
+}
+
+model Payment {
+  id               String              @id @default(uuid())
+  projectId        String              @unique @map("project_id")
+  quoteId          String              @map("quote_id")
+  escrowAmount     Float               @map("escrow_amount")
+  releasedAmount   Float               @default(0) @map("released_amount")
+  mobileMoneyRef   String?             @map("mobile_money_ref")
+  mobileMoneyPhone String              @map("mobile_money_phone")
+  mobileMoneyProv  MobileMoneyProvider @map("mobile_money_provider")
+  status           PaymentStatus       @default(PENDING)
+  callbackData     Json?               @map("callback_data")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  project    Project     @relation(fields: [projectId], references: [id])
+  milestones Milestone[]
+
+  @@map("payments")
+}
+
+model Milestone {
+  id          String          @id @default(uuid())
+  paymentId   String          @map("payment_id")
+  title       String
+  description String?
+  amount      Float
+  order       Int
+  status      MilestoneStatus @default(PENDING)
+  approvedAt  DateTime?       @map("approved_at")
+  paidAt      DateTime?       @map("paid_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  @@map("milestones")
+}
+
+model Review {
+  id         String   @id @default(uuid())
+  projectId  String   @map("project_id")
+  reviewerId String   @map("reviewer_id")
+  revieweeId String   @map("reviewee_id")
+  rating     Int
+  comment    String?
+  isVisible  Boolean  @default(true) @map("is_visible")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  project  Project @relation(fields: [projectId], references: [id])
+  reviewer User    @relation("ReviewsGiven", fields: [reviewerId], references: [id])
+  reviewee User    @relation("ReviewsReceived", fields: [revieweeId], references: [id])
+
+  @@map("reviews")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  type      String
+  title     String
+  body      String
+  payload   Json?
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model OtpCode {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  phone     String
+  code      String
+  purpose   String   @default("verification") // verification, payment, sensitive
+  isUsed    Boolean  @default(false) @map("is_used")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("otp_codes")
+}
