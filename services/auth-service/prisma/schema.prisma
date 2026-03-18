@@ -1,0 +1,35 @@
+// Auth Service Prisma Schema
+// West Africa Housing Marketplace (MHAO)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CLIENT
+  PROVIDER
+  ADMIN
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  passwordHash    String
+  firstName       String
+  lastName        String
+  phone           String?  @unique
+  role            Role     @default(CLIENT)
+  isActive        Boolean  @default(true)
+  isPhoneVerified Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([email])
+  @@index([phone])
+  @@map("users")
+}
